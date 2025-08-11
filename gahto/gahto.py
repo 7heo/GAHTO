@@ -20,6 +20,13 @@ from iso_4217 import Currency  # type: ignore [import] # pylint: disable=E0401
 # The default currency for this package
 DEFAULT_CURRENCY = Currency.EUR
 
+# For now, only the string type is implemented. I am not sure how to implement
+# the rest, but for further information, see here:
+# https://code.gnucash.org/docs/STABLE/structKvpValueImpl.html#af35395e9846fc97d6daf29343fb3b978
+XML_TYPES_NAMES: dict[type, str] = {
+    str: "string",
+}
+
 
 class MetaAccountType(type):
     """Meta class for AccountType - Only for having getattr and setattr work on
@@ -157,6 +164,7 @@ class GATO:
         self.__description: str | None = None
         # Generate a (GNUCash compatible) GUID for the account
         self.__uuid = uuid4().hex
+        self.__slots: dict[str, Any] = {}
         self.__subaccounts: list[GATO] = []
 
     def get_name(self: "GATO") -> str:
@@ -210,6 +218,23 @@ class GATO:
             raise TypeError(f"{description} isn't a string")
         self.__description = description
 
+    def get_slot(self: "GATO", key: str) -> Any:
+        """Gets a slot from the GATO object"""
+        if not isinstance(key, str):
+            raise TypeError(f"key {key} isn't a string")
+        return self.__slots.get(key, None)
+
+    def set_slot(self: "GATO", key: str, value: Any) -> None:
+        """Sets a slot to the GATO object"""
+        if not isinstance(key, str):
+            raise TypeError(f"key {key} isn't a string")
+        # Blacklisted values are set elsewhere (or not at all)
+        blacklisted = ['tax-related', 'hidden', 'color', 'equity-type',
+                       'placeholder', 'notes']
+        if key in blacklisted:
+            raise AttributeError(f"Slot '{key}' is set via a dedicated method")
+        self.__slots[key] = value
+
     def add_subaccount(self: "GATO", child: "GATO") -> None:
         """Add a GATO as a child to this GATO"""
         if self.__type.is_valid_parent_of(child.get_type()):
@@ -219,7 +244,6 @@ class GATO:
                            for_template: bool) -> None:
         """Add ElementTree SubElement(s) of this account to the parent
         element"""
-        # TODO implement slots (GNUCash "dicts")
         # TODO implement notes (slot)
         # TODO implement tax info (slot)
         # TODO implement hidden (slot - read only)
@@ -244,6 +268,14 @@ class GATO:
             self.__currency.subunit.from_(self.__currency.unit).magnitude))
         if self.__description is not None:
             ET.SubElement(acct, "act:description").text = self.__description
+        if self.__slots:
+            slots_node = ET.SubElement(acct, "act:slots")
+            for key, value in self.__slots.items():
+                slot_node = ET.SubElement(slots_node, "slot")
+                ET.SubElement(slot_node, "slot:key").text = key
+                ET.SubElement(slot_node, "slot:value", attrib={
+                        "type": XML_TYPES_NAMES[type(value)]
+                    }).text = value
         ET.SubElement(acct, "act:parent", attrib={
                 "type": "new" if for_template else "guid"
             }).text = parent_guid
