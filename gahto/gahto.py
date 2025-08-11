@@ -10,6 +10,7 @@
 # "preposterous", check your privileges...).
 
 # Stdlib imports
+from typing import Any
 from uuid import uuid4
 from xml.etree import ElementTree as ET
 
@@ -19,33 +20,130 @@ from iso_4217 import Currency  # type: ignore [import] # pylint: disable=E0401
 # The default currency for this package
 DEFAULT_CURRENCY = Currency.EUR
 
-# The account types are from
-# https://gnucash.org/docs/v5/C/gnucash-manual//acct-types.html
-#
-# The page (as of Thu 07 Aug 2025) is outdated, and so, the "Currency" type has
-# been gone for a while, while the "Trading" type is now available.
-ACCOUNT_TYPES = {
-    "PAYABLE": "Accounts Payable",
-    "RECEIVABLE": "Accounts Receivable",
-    "ASSET": "Asset",
-    "BANK": "Bank",
-    "CASH": "Cash",
-    "CREDIT": "Credit Card",
-    "EQUITY": "Equity",
-    "EXPENSE": "Expense",
-    "INCOME": "Income",
-    "LIABILITY": "Liability",
-    "MUTUAL": "Mutual Fund",
-    "STOCK": "Stock",
-    "TRADING": "Trading",
-}
-# TODO transform the above dict into a validation dict for valid children types
+
+class MetaAccountType(type):
+    """Meta class for AccountType - Only for having getattr and setattr work on
+    class variables."""
+    def __getattr__(cls: "AccountType", name: str) -> Any:  # type: ignore[misc] # noqa: E501
+        return cls.__getattr__(cls, name)  # type: ignore[call-arg,arg-type]
+
+    def __setattr__(cls: "AccountType", name: str, val: Any) -> None:  # type: ignore[misc] # noqa: E501 # pylint: disable=C0301
+        type.__setattr__(cls, name, val)
+
+
+class AccountType(metaclass=MetaAccountType):
+    """GATO Account Type
+
+    The account types are from
+    https://gnucash.org/docs/v5/C/gnucash-manual//acct-types.html
+
+    The page (as of Thu 07 Aug 2025) is outdated, and so, the "Currency" type
+    has been gone for a while, while the "Trading" type is now available (but
+    isn't documented yet). The information contained in this class has
+    therefore been obtained empirically.
+    """
+    __names = {
+        "PAYABLE": "AccountsPayable",
+        "RECEIVABLE": "AccountsReceivable",
+        "ASSET": "Asset",
+        "BANK": "Bank",
+        "CASH": "Cash",
+        "CREDIT": "CreditCard",
+        "EQUITY": "Equity",
+        "EXPENSE": "Expense",
+        "INCOME": "Income",
+        "LIABILITY": "Liability",
+        "MUTUAL": "MutualFund",
+        "STOCK": "Stock",
+        "TRADING": "Trading",
+    }
+    __labels = {
+        "PAYABLE": "Accounts Payable",
+        "RECEIVABLE": "Accounts Receivable",
+        "ASSET": "Asset",
+        "BANK": "Bank",
+        "CASH": "Cash",
+        "CREDIT": "Credit Card",
+        "EQUITY": "Equity",
+        "EXPENSE": "Expense",
+        "INCOME": "Income",
+        "LIABILITY": "Liability",
+        "MUTUAL": "Mutual Fund",
+        "STOCK": "Stock",
+        "TRADING": "Trading",
+    }
+    __default_allowed_list = ["PAYABLE", "RECEIVABLE", "ASSET", "BANK", "CASH",
+                              "CREDIT", "LIABILITY", "MUTUAL", "STOCK"]
+    __allowed_child_account_types = {
+        "PAYABLE":    __default_allowed_list,
+        "RECEIVABLE": __default_allowed_list,
+        "ASSET":      __default_allowed_list,
+        "BANK":       __default_allowed_list,
+        "CASH":       __default_allowed_list,
+        "CREDIT":     __default_allowed_list,
+        "EQUITY":     ["EQUITY"],
+        "EXPENSE":    ["EXPENSE", "INCOME"],
+        "INCOME":     ["EXPENSE", "INCOME"],
+        "LIABILITY":  __default_allowed_list,
+        "MUTUAL":     __default_allowed_list,
+        "STOCK":      __default_allowed_list,
+        "TRADING":    ["TRADING"],
+    }
+    # NOTE possibly merge all the data above, in one big dict or list of dict,
+    #      etc. Use what makes sense.
+
+    def __init__(self: "AccountType", typename: str) -> None:
+        kname, vname = next((x for x in self.__names.items() if typename in x),
+                            ("", ""))
+        if kname == vname == "":
+            raise ValueError(f"{self.__class__.__name__} cannot take the value"
+                             f" '{typename}'.")
+        self.__value = kname
+        self.__label = self.__labels[kname]
+        self.__name = vname
+
+    def __getattr__(self: "AccountType", name: str) -> Any:
+        kname, vname = next((x for x in self.__names.items() if name in x),
+                            ("", ""))
+        if kname == vname == "":
+            values_list = ", ".join(x for y in self.__names.items() for x in y)
+            raise ValueError(f"Account type '{name}' not in: {values_list}.")
+        obj = AccountType(name)
+        setattr(self, kname, obj)
+        setattr(self, vname, obj)
+        return getattr(self, name)
+
+    def __repr__(self: "AccountType") -> str:
+        return f"<{self.__module__}.{self.__class__.__qualname__}" \
+               f"({self.__name}) object at {hex(id(self))}>"
+
+    def label(self: "AccountType") -> str:
+        """Gets the human readable label of the type"""
+        return self.__label
+
+    def value(self: "AccountType") -> str:
+        """Gets the value (for the XML file) of the type"""
+        return self.__value
+
+    def type_name(self: "AccountType") -> str:
+        """Gets the type name"""
+        return self.__name
+
+    def is_valid_child_of(self: "AccountType", parent: "AccountType") -> bool:
+        """Checks if an account type is a valid child of another"""
+        return self.value() \
+            in self.__allowed_child_account_types[parent.value()]
+
+    def is_valid_parent_of(self: "AccountType", child: "AccountType") -> bool:
+        """Checks if an account type is a valid parent of another"""
+        return child.value() \
+            in self.__allowed_child_account_types[self.value()]
 
 
 class GATO:
     """GNUCash Account Template Object main class"""
 
-    def __init__(self: "GATO", name: str, acct_type: str,
+    def __init__(self: "GATO", name: str, acct_type: AccountType,
                  code: str | None = None,
                  currency: Currency = DEFAULT_CURRENCY) -> None:
         self.set_name(name)
@@ -71,14 +169,15 @@ class GATO:
             raise TypeError(f"{name} isn't a string")
         self.__name = name
 
-    def get_type(self: "GATO") -> str:
+    def get_type(self: "GATO") -> AccountType:
         """Gets the type of the GATO object"""
         return self.__type
 
-    def set_type(self: "GATO", acct_type: str) -> None:
+    def set_type(self: "GATO", acct_type: AccountType) -> None:
         """Sets the type of the GATO object"""
-        if acct_type not in ACCOUNT_TYPES:
-            raise ValueError(f"Account type {acct_type} not valid.")
+        if not isinstance(acct_type, AccountType):
+            raise TypeError(f"Account type {acct_type} isn't of the type "
+                            f"{AccountType.__name__}")
         self.__type = acct_type
 
     def get_code(self: "GATO") -> str | None:
@@ -113,8 +212,8 @@ class GATO:
 
     def add_subaccount(self: "GATO", child: "GATO") -> None:
         """Add a GATO as a child to this GATO"""
-        # TODO Validate that the child type is valid with the parent type
-        self.__subaccounts.append(child)
+        if self.__type.is_valid_parent_of(child.get_type()):
+            self.__subaccounts.append(child)
 
     def add_subelements_to(self: "GATO", parent: ET.Element, parent_guid: str,
                            for_template: bool) -> None:
@@ -139,7 +238,7 @@ class GATO:
         ET.SubElement(acct, "act:id", attrib={
                 "type": "new" if for_template else "guid"
             }).text = self.__uuid
-        ET.SubElement(acct, "act:type").text = self.__type
+        ET.SubElement(acct, "act:type").text = self.__type.value()
         commodity_node = ET.SubElement(acct, "act:commodity")
         ET.SubElement(commodity_node, "cmdty:space").text = "CURRENCY"
         ET.SubElement(commodity_node, "cmdty:id").text = self.__currency.name
@@ -195,7 +294,6 @@ class GAHTO:
 
     def add_account(self: "GAHTO", account: GATO) -> None:
         """Adds a GATO account to the GAHTO object"""
-        # TODO Validate that the child type is valid with the parent type
         self.__top_level_accounts.append(account)
 
     def export(self: "GAHTO", path: str, to_template: bool = True) -> None:
