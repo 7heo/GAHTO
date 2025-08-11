@@ -235,6 +235,66 @@ class GATO:
             raise AttributeError(f"Slot '{key}' is set via a dedicated method")
         self.__slots[key] = value
 
+    def get_notes(self: "GATO") -> str:
+        """Gets the notes from the GATO object"""
+        return self.__slots.get("notes", "")
+
+    def set_notes(self: "GATO", notes: str) -> None:
+        """Adds notes to the GATO object"""
+        self.__slots["notes"] = notes
+
+    def get_tax_related(self: "GATO") -> bool:
+        """Gets the tax-related status from the GATO object"""
+        return self.__slots.get("tax-related", "").lower().strip() == "true"
+
+    def get_hidden(self: "GATO") -> bool:
+        """Gets the hidden status of the GATO object"""
+        return self.__slots.get("hidden", "").lower().strip() == "true"
+
+    def get_placeholder(self: "GATO") -> bool:
+        """Gets the state of the "placeholder" value"""
+        return self.__slots.get("placeholder", "").lower().strip() == "true"
+
+    def set_placeholder(self: "GATO", state: bool = True) -> None:
+        """Sets the state of the "placeholder" value"""
+        self.__slots["placeholder"] = "true" if state else "false"
+
+    def is_opening_balance(self: "GATO") -> bool:
+        """Gets if the account has an opening balance"""
+        return self.__slots.get("equity-type", "").lower().strip() \
+            == "opening-balance"
+
+    def get_account_color(self: "GATO") -> tuple[int, int, int] | None:
+        """Gets the color of the GATO object"""
+        rgbcolor = self.__slots.get("color", None)
+        if rgbcolor is None:
+            return None
+        if rgbcolor[0:4].lower() != "rgb(" or rgbcolor[-1] != ")":
+            raise ValueError(f"RGB color {rgbcolor} not in the form "
+                             "rgb(..., ..., ...)")
+        try:
+            _r, _g, _b = (x.strip() for x in rgbcolor[4:-1].split(","))
+        except ValueError as ex:
+            raise ValueError(f"RGB color {rgbcolor} not in the form "
+                             "rgb(..., ..., ...)") from ex
+        return (int(_r), int(_g), int(_b))
+
+    def set_account_color(self: "GATO", _r: int, _g: int, _b: int) -> None:
+        """Sets the color of the GATO object"""
+        if not isinstance(_r, int):
+            raise TypeError(f"Value {_r} for the color red has to be an int")
+        if not isinstance(_g, int):
+            raise TypeError(f"Value {_g} for the color green has to be an int")
+        if not isinstance(_b, int):
+            raise TypeError(f"Value {_b} for the color blue has to be an int")
+        if _r < 0 or _r > 255:
+            raise ValueError(f"Value {_r} for the color red isn't valid.")
+        if _g < 0 or _g > 255:
+            raise ValueError(f"Value {_g} for the color green isn't valid.")
+        if _b < 0 or _b > 255:
+            raise ValueError(f"Value {_b} for the color blue isn't valid.")
+        self.__slots["color"] = f"rgb({_r},{_g},{_b})"
+
     def add_subaccount(self: "GATO", child: "GATO") -> None:
         """Add a GATO as a child to this GATO"""
         if self.__type.is_valid_parent_of(child.get_type()):
@@ -244,13 +304,6 @@ class GATO:
                            for_template: bool) -> None:
         """Add ElementTree SubElement(s) of this account to the parent
         element"""
-        # TODO implement notes (slot)
-        # TODO implement tax info (slot)
-        # TODO implement hidden (slot - read only)
-        # TODO implement Placeholder (slot)
-        # TODO implement opening-balance (slot)
-        # TODO make sure opening-balance occurs ONLY ONCE
-        # TODO implement color (slot - read only)
         acct = ET.SubElement(parent, "gnc:account", attrib={
                 "version": "2.0.0"
             })
