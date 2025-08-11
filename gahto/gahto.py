@@ -37,10 +37,10 @@ XML_TYPES_NAMES: dict[type, str] = {
 class MetaAccountType(type):
     """Meta class for AccountType - Only for having getattr and setattr work on
     class variables."""
-    def __getattr__(cls: "AccountType", name: str) -> Any:  # type: ignore[misc] # noqa: E501
+    def __getattr__(cls: "MetaAccountType", name: str) -> Any:
         return cls.__getattr__(cls, name)  # type: ignore[call-arg,arg-type]
 
-    def __setattr__(cls: "AccountType", name: str, val: Any) -> None:  # type: ignore[misc] # noqa: E501 # pylint: disable=C0301
+    def __setattr__(cls: "MetaAccountType", name: str, val: Any) -> None:
         type.__setattr__(cls, name, val)
 
 
