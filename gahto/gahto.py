@@ -1,13 +1,284 @@
 """GNUCash Account Hierarchy Template Object"""
 
+# NOTE
+#
+# This file has been validated by pylint, flake8, and mypy. The code within is
+# therefore modified to accommodate the idiosyncrasies of those tools.
+# Such modifications include the length of lines (< 80 characters), which is
+# actually desirable (it brings the text past the middle of the screen on
+# monitors with resolutions of 1366x768 or lower-and if you think this is
+# "preposterous", check your privileges...).
+
+# Stdlib imports
+from uuid import uuid4
+from xml.etree import ElementTree as ET
+
+# Package imports
+from iso_4217 import Currency  # type: ignore [import] # pylint: disable=E0401
+
+# The default currency for this package
+DEFAULT_CURRENCY = Currency.EUR
+
+# The account types are from
+# https://gnucash.org/docs/v5/C/gnucash-manual//acct-types.html
+#
+# The page (as of Thu 07 Aug 2025) is outdated, and so, the "Currency" type has
+# been gone for a while, while the "Trading" type is now available.
+ACCOUNT_TYPES = {
+    "PAYABLE": "Accounts Payable",
+    "RECEIVABLE": "Accounts Receivable",
+    "ASSET": "Asset",
+    "BANK": "Bank",
+    "CASH": "Cash",
+    "CREDIT": "Credit Card",
+    "EQUITY": "Equity",
+    "EXPENSE": "Expense",
+    "INCOME": "Income",
+    "LIABILITY": "Liability",
+    "MUTUAL": "Mutual Fund",
+    "STOCK": "Stock",
+    "TRADING": "Trading",
+}
+# TODO transform the above dict into a validation dict for valid children types
+
+
+class GATO:
+    """GNUCash Account Template Object main class"""
+
+    def __init__(self: "GATO", name: str, acct_type: str,
+                 code: str | None = None,
+                 currency: Currency = DEFAULT_CURRENCY) -> None:
+        self.set_name(name)
+        self.set_type(acct_type)
+        self.__code: str | None
+        if code is not None:
+            self.set_code(code)
+        else:
+            self.__code = None
+        self.set_currency(currency)
+        self.__description: str | None = None
+        # Generate a (GNUCash compatible) GUID for the account
+        self.__uuid = uuid4().hex
+        self.__subaccounts: list[GATO] = []
+
+    def get_name(self: "GATO") -> str:
+        """Gets the name of the GATO object"""
+        return self.__name
+
+    def set_name(self: "GATO", name: str):
+        """Sets the name of the GATO object"""
+        if not isinstance(name, str):
+            raise TypeError(f"{name} isn't a string")
+        self.__name = name
+
+    def get_type(self: "GATO") -> str:
+        """Gets the type of the GATO object"""
+        return self.__type
+
+    def set_type(self: "GATO", acct_type: str) -> None:
+        """Sets the type of the GATO object"""
+        if acct_type not in ACCOUNT_TYPES:
+            raise ValueError(f"Account type {acct_type} not valid.")
+        self.__type = acct_type
+
+    def get_code(self: "GATO") -> str | None:
+        """Gets the code of a GATO object"""
+        return self.__code
+
+    def set_code(self: "GATO", code: str):
+        """Sets the code of the GATO object"""
+        if not isinstance(code, str):
+            raise TypeError(f"{code} isn't a string")
+        self.__code = code
+
+    def get_currency(self: "GATO") -> Currency:
+        """Gets the currency for the GATO object"""
+        return self.__currency
+
+    def set_currency(self: "GATO", currency: Currency) -> None:
+        """Sets the currency for the GATO object"""
+        if not isinstance(currency, Currency):
+            raise TypeError(f"{currency} isn't of type {type(Currency)}")
+        self.__currency = currency
+
+    def get_description(self: "GATO") -> str | None:
+        """Gets the description of the GATO object"""
+        return self.__description
+
+    def set_description(self: "GATO", description: str):
+        """Sets the description of the GATO object"""
+        if not isinstance(description, str):
+            raise TypeError(f"{description} isn't a string")
+        self.__description = description
+
+    def add_subaccount(self: "GATO", child: "GATO") -> None:
+        """Add a GATO as a child to this GATO"""
+        # TODO Validate that the child type is valid with the parent type
+        self.__subaccounts.append(child)
+
+    def add_subelements_to(self: "GATO", parent: ET.Element, parent_guid: str,
+                           for_template: bool) -> None:
+        """Add ElementTree SubElement(s) of this account to the parent
+        element"""
+        # TODO implement slots (GNUCash "dicts")
+        # TODO implement notes (slot)
+        # TODO implement tax info (slot)
+        # TODO implement hidden (slot - read only)
+        # TODO implement Placeholder (slot)
+        # TODO implement opening-balance (slot)
+        # TODO make sure opening-balance occurs ONLY ONCE
+        # TODO implement color (slot - read only)
+        acct = ET.SubElement(parent, "gnc:account", attrib={
+                "version": "2.0.0"
+            })
+        ET.SubElement(acct, "act:name").text = self.__name
+        if self.__code is not None:
+            ET.SubElement(acct, "act:code").text = self.__code
+        if self.__description is not None:
+            ET.SubElement(acct, "act:description").text = self.__description
+        ET.SubElement(acct, "act:id", attrib={
+                "type": "new" if for_template else "guid"
+            }).text = self.__uuid
+        ET.SubElement(acct, "act:type").text = self.__type
+        commodity_node = ET.SubElement(acct, "act:commodity")
+        ET.SubElement(commodity_node, "cmdty:space").text = "CURRENCY"
+        ET.SubElement(commodity_node, "cmdty:id").text = self.__currency.name
+        ET.SubElement(acct, "act:commodity-scu").text = str(int(
+            self.__currency.subunit.from_(self.__currency.unit).magnitude))
+        ET.SubElement(acct, "act:parent", attrib={
+                "type": "new" if for_template else "guid"
+            }).text = parent_guid
+
+        for account in self.__subaccounts:
+            account.add_subelements_to(parent, self.__uuid, for_template)
+
 
 class GAHTO:
     """GNUCash Hierarchy Account Template Object main class"""
+    def __init__(self: "GAHTO", title: str | None = None,
+                 currency: Currency = DEFAULT_CURRENCY) -> None:
+        self.__top_level_accounts: list[GATO] = []
+        self.__title = title
+        self.__short_description: str | None = None
+        self.__long_description: str | None = None
+        self.__currency = currency
+        self.__exclude_from_select_all: bool = True
+        # Generate a (GNUCash compatible) GUID for the Root Account
+        self.__root_acct_guid = uuid4().hex
 
-    def export(self: "GAHTO", path: str) -> bool:
+    def set_title(self: "GAHTO", title: str) -> None:
+        """Sets the title of the GAHTO object"""
+        self.__title = title
+
+    def set_description(self: "GAHTO", short: str | None,
+                        long: str | None = None) -> None:
+        """Sets the description(s) of the GAHTO object"""
+        if short is not None:
+            self.__short_description = short
+        if long is not None:
+            self.__long_description = long
+
+    def set_currency(self: "GAHTO", currency: Currency) -> None:
+        """Sets the currency of the GAHTO object"""
+        if not isinstance(currency, Currency):
+            raise TypeError(f"Currency {currency} is of type {type(currency)}."
+                            f" Expected type is {type(Currency)}.")
+        self.__currency = currency
+
+    def exclude_from_select_all(self: "GAHTO") -> None:
+        """Sets the "exclude_from_select_all" value to false"""
+        self.__exclude_from_select_all = True
+
+    def include_in_select_all(self: "GAHTO") -> None:
+        """Sets the "exclude_from_select_all" value to false"""
+        self.__exclude_from_select_all = False
+
+    def add_account(self: "GAHTO", account: GATO) -> None:
+        """Adds a GATO account to the GAHTO object"""
+        # TODO Validate that the child type is valid with the parent type
+        self.__top_level_accounts.append(account)
+
+    def export(self: "GAHTO", path: str, to_template: bool = True) -> None:
         """Exports the GAHTO object to an XML file at path"""
-        _ = path
-        return False
 
-    def add_account(self: "GAHTO", account_name: str) -> None:
-        """Adds an account to the GAHTO object"""
+        # Define the XML root element
+        root_node = ET.Element("gnc-account-example")
+        root_node.set("xmlns", "http://www.gnucash.org/XML/")
+        root_node.set("xmlns:act", "http://www.gnucash.org/XML/act")
+        root_node.set("xmlns:addr", "http://www.gnucash.org/XML/addr")
+        root_node.set("xmlns:bgt", "http://www.gnucash.org/XML/bgt")
+        root_node.set("xmlns:billterm", "http://www.gnucash.org/XML/billterm")
+        root_node.set("xmlns:book", "http://www.gnucash.org/XML/book")
+        root_node.set("xmlns:bt-days", "http://www.gnucash.org/XML/bt-days")
+        root_node.set("xmlns:bt-prox", "http://www.gnucash.org/XML/bt-prox")
+        root_node.set("xmlns:cd", "http://www.gnucash.org/XML/cd")
+        root_node.set("xmlns:cmdty", "http://www.gnucash.org/XML/cmdty")
+        root_node.set("xmlns:cust", "http://www.gnucash.org/XML/cust")
+        root_node.set("xmlns:employee", "http://www.gnucash.org/XML/employee")
+        root_node.set("xmlns:entry", "http://www.gnucash.org/XML/entry")
+        root_node.set("xmlns:fs", "http://www.gnucash.org/XML/fs")
+        root_node.set("xmlns:gnc", "http://www.gnucash.org/XML/gnc")
+        root_node.set("xmlns:gnc-act", "http://www.gnucash.org/XML/gnc-act")
+        root_node.set("xmlns:invoice", "http://www.gnucash.org/XML/invoice")
+        root_node.set("xmlns:job", "http://www.gnucash.org/XML/job")
+        root_node.set("xmlns:lot", "http://www.gnucash.org/XML/lot")
+        root_node.set("xmlns:order", "http://www.gnucash.org/XML/order")
+        root_node.set("xmlns:owner", "http://www.gnucash.org/XML/owner")
+        root_node.set("xmlns:price", "http://www.gnucash.org/XML/price")
+        root_node.set("xmlns:recurrence",
+                      "http://www.gnucash.org/XML/recurrence")
+        root_node.set("xmlns:slot", "http://www.gnucash.org/XML/slot")
+        root_node.set("xmlns:split", "http://www.gnucash.org/XML/split")
+        root_node.set("xmlns:sx", "http://www.gnucash.org/XML/sx")
+        root_node.set("xmlns:taxtable", "http://www.gnucash.org/XML/taxtable")
+        root_node.set("xmlns:trn", "http://www.gnucash.org/XML/trn")
+        root_node.set("xmlns:ts", "http://www.gnucash.org/XML/ts")
+        root_node.set("xmlns:tte", "http://www.gnucash.org/XML/tte")
+        root_node.set("xmlns:vendor", "http://www.gnucash.org/XML/vendor")
+
+        # Define all the root element direct children
+        ET.SubElement(root_node, "gnc-act:title").text = \
+            self.__title if self.__title is not None else "<No title>"
+
+        ET.SubElement(root_node, "gnc-act:short-description").text = \
+            self.__short_description if self.__short_description is not None \
+            else "<No description>"
+
+        ET.SubElement(root_node, "gnc-act:long-description").text = \
+            self.__long_description if self.__long_description is not None \
+            else \
+            """<No description was provided during the creation of this Account
+            Hierarchy Template. Please report the issue to whoever created it>
+            """
+
+        ET.SubElement(root_node, "gnc-act:exclude-from-select-all").text = \
+            str(int(self.__exclude_from_select_all))
+
+        # Define the Root Account (GNUCash concept)
+        root_acct = ET.SubElement(root_node, "gnc:account", attrib={
+                "version": "2.0.0"
+            })
+
+        # Define all the Root Account children
+        ET.SubElement(root_acct, "act:name").text = "Root Account"
+
+        ET.SubElement(root_acct, "act:id", attrib={
+                "type": "new" if to_template else "guid"
+            }).text = self.__root_acct_guid
+
+        ET.SubElement(root_acct, "act:type").text = "ROOT"
+
+        commodity_node = ET.SubElement(root_acct, "act:commodity")
+        ET.SubElement(commodity_node, "cmdty:space").text = "CURRENCY"
+        ET.SubElement(commodity_node, "cmdty:id").text = self.__currency.name
+
+        ET.SubElement(root_acct, "act:commodity-scu").text = str(int(
+            self.__currency.subunit.from_(self.__currency.unit).magnitude))
+
+        for account in self.__top_level_accounts:
+            account.add_subelements_to(root_node, self.__root_acct_guid,
+                                       to_template)
+
+        tree = ET.ElementTree(root_node)
+        ET.indent(tree)
+        tree.write(path, xml_declaration=True, encoding="Unicode")
