@@ -24,3 +24,6 @@ license = {"text" = "BSD-3-Clause"}
 [project.urls]
 Homepage = "https://github.com/7heo/GAHTO"
 Issues = "https://github.com/7heo/GAHTO/issues"
+
+[tool.setuptools.package-data]
+pkg = ["py.typed"]
