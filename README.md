@@ -10,7 +10,20 @@ Usage
 
 ```python
 from gahto.gahto import GAHTO
+from gahto.gahto import GATO
+from gahto.gahto import AccountType
 
-EL = GAHTO()
+EL = GAHTO("Title")
+EL.set_description("Short description", "Longer description")
 
+expenses_acct = GATO("Expenses", AccountType.Expense)
+expenses_acct.set_description("Expenses")
+expenses_acct.set_placeholder(True)
+EL.add_account(expenses_acct)
+
+childcare_acct = GATO("Childcare", AccountType.Expense)
+childcare_acct.set_description("Childcare")
+expenses_acct.add_subaccount(childcare_acct)
+
+EL.export("example-account-hierarchy.gnucash-xea")
 ```
