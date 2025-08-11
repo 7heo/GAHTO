@@ -27,3 +27,21 @@ expenses_acct.add_subaccount(childcare_acct)
 
 EL.export("example-account-hierarchy.gnucash-xea")
 ```
+
+Run tests
+---------
+
+With [`python-coverage`](https://github.com/nedbat/coveragepy) and
+[`pytest`](https://pytest.org/) installed, run:
+
+```sh
+$ python3-coverage run -m pytest
+$ python3-coverage html
+$ xdg-open htmlcov/index.html
+```
+
+Alternatively, you can replace the last two commands with:
+
+```sh
+$ python3-coverage report
+```
