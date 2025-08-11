@@ -233,8 +233,6 @@ class GATO:
         ET.SubElement(acct, "act:name").text = self.__name
         if self.__code is not None:
             ET.SubElement(acct, "act:code").text = self.__code
-        if self.__description is not None:
-            ET.SubElement(acct, "act:description").text = self.__description
         ET.SubElement(acct, "act:id", attrib={
                 "type": "new" if for_template else "guid"
             }).text = self.__uuid
@@ -244,6 +242,8 @@ class GATO:
         ET.SubElement(commodity_node, "cmdty:id").text = self.__currency.name
         ET.SubElement(acct, "act:commodity-scu").text = str(int(
             self.__currency.subunit.from_(self.__currency.unit).magnitude))
+        if self.__description is not None:
+            ET.SubElement(acct, "act:description").text = self.__description
         ET.SubElement(acct, "act:parent", attrib={
                 "type": "new" if for_template else "guid"
             }).text = parent_guid
