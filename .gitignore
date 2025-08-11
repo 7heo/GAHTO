@@ -2,3 +2,6 @@ __pycache__
 .venv
 *.xml
 .coverage
+dist/
+*.egg-info/
+*.dist-info/
