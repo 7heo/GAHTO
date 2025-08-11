@@ -9,6 +9,12 @@
 # monitors with resolutions of 1366x768 or lower-and if you think this is
 # "preposterous", check your privileges...).
 
+# TODO  # pylint: disable=W0511
+#
+# - Properly implement all supported slot types (not just string)
+# - Implement XML namespaces properly (and not via string output)
+# - Implement parsing XML (gnucash-xea) files
+
 # Stdlib imports
 from typing import Any
 from uuid import uuid4
